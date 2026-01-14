@@ -1,0 +1,200 @@
+# ========================================
+# IDE and Editors
+# ========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+
+# ========================================
+# Python
+# ========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+pip-log.txt
+pip-delete-this-directory.txt
+
+# uv
+.uv/
+.python-version
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# ========================================
+# C/C++
+# ========================================
+# Object files
+*.o
+*.ko
+*.obj
+*.elf
+
+# Libraries
+*.lib
+*.a
+*.la
+*.lo
+*.so
+*.so.*
+*.dylib
+
+# Executables
+*.exe
+*.out
+*.app
+idps_daemon
+*_test
+
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+install_manifest.txt
+CTestTestfile.cmake
+compile_commands.json
+Makefile
+
+# eBPF
+*.bpf.o
+*.skel.h
+
+# ========================================
+# Node.js / Frontend
+# ========================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+package-lock.json
+yarn.lock
+
+# Build output
+dist/
+dist-ssr/
+build/
+
+# Testing
+coverage/
+.nyc_output/
+
+# Environment
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# ========================================
+# Docker
+# ========================================
+.dockerignore
+
+# ========================================
+# Logs
+# ========================================
+*.log
+logs/
+*.log.*
+
+# ========================================
+# Database
+# ========================================
+*.db
+*.sqlite
+*.sqlite3
+
+# ========================================
+# Environment and Configuration
+# ========================================
+.env
+.env.*
+!.env.example
+
+# ========================================
+# Secrets and Certificates
+# ========================================
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+!docker/nginx/certs/.gitkeep
+
+# ========================================
+# Temporary files
+# ========================================
+*.tmp
+*.temp
+*.bak
+*.backup
+*.cache
+
+# ========================================
+# OS specific
+# ========================================
+Thumbs.db
+Desktop.ini
+.Spotlight-V100
+.Trashes
+
+# ========================================
+# Project specific
+# ========================================
+# Vehicle build directories
+vehicle/build/
+vehicle/build-*/
+
+# Rule files (可能包含敏感信息)
+rules/
+*.rules
+
+# Data and cache
+data/
+cache/
+*.cache/
+
+# Documentation build
+docs/_build/
+docs/.doctrees/
+
+# Test results
+test-results/
+junit.xml

@@ -1,0 +1,92 @@
+name: Vehicle CI
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'vehicle/**'
+      - '.github/workflows/vehicle-ci.yml'
+  pull_request:
+    paths:
+      - 'vehicle/**'
+      - '.github/workflows/vehicle-ci.yml'
+
+env:
+  DOCKER_REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/idps-vehicle
+
+jobs:
+  lint:
+    name: Code Linting
+    runs-on: ubuntu-latest
+    container:
+      image: gcc:11
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install clang-format
+        run: |
+          apt-get update
+          apt-get install -y clang-format
+
+      - name: Run clang-format check
+        working-directory: vehicle
+        run: make lint
+
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    container:
+      image: gcc:11
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          apt-get update
+          apt-get install -y cmake libssl-dev libjansson-dev pkg-config
+
+      - name: Build and run tests
+        working-directory: vehicle
+        run: |
+          make build
+          make test
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vehicle-test-results
+          path: vehicle/build/test-results/*.xml
+
+  build:
+    name: Cross-compile Build (ARM64)
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install cross-compilation toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+          sudo apt-get install -y libssl-dev libjansson-dev
+
+      - name: Cross-compile for ARM64
+        working-directory: vehicle
+        run: make build-cross
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: idps-daemon-arm64
+          path: vehicle/build-aarch64/src/daemon/idps_daemon
+          retention-days: 7

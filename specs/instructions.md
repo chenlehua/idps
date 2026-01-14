@@ -107,3 +107,7 @@ instruct和superapks字段：检查系统中是否存在root程序，如果存�
 
 按照./specs/0002-design.md文件中的设计，帮我生成实现计划，放在./specs/0003-implementation-plan.md 文件中, 输出为中文。
 
+## implemention
+
+按照 ./specs/0003-implementation-plan.md 完整实现这个项目的 phase 1代码。
+

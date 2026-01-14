@@ -1,0 +1,129 @@
+[project]
+name = "idps-cloud"
+version = "0.1.0"
+description = "IDPS Cloud Backend Services"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    # Web Framework
+    "flask>=3.0.0",
+    "flask-cors>=4.0.0",
+    "flask-limiter>=3.5.0",
+    "werkzeug>=3.0.1",
+    "gunicorn>=21.2.0",
+
+    # Database
+    "sqlalchemy>=2.0.23",
+    "alembic>=1.13.0",
+    "pymysql>=1.1.0",
+    "clickhouse-driver>=0.2.6",
+    "redis>=5.0.1",
+    "hiredis>=2.2.3",
+
+    # Authentication & Security
+    "pyjwt>=2.8.0",
+    "cryptography>=41.0.7",
+    "bcrypt>=4.1.2",
+
+    # Validation & Serialization
+    "marshmallow>=3.20.1",
+    "python-dotenv>=1.0.0",
+    "pydantic>=2.5.2",
+
+    # Utilities
+    "requests>=2.31.0",
+    "python-dateutil>=2.8.2",
+    "pytz>=2023.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.3",
+    "pytest-cov>=4.1.0",
+    "pytest-flask>=1.3.0",
+    "black>=23.12.1",
+    "flake8>=6.1.0",
+    "mypy>=1.7.1",
+    "ruff>=0.1.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["common", "auth_service", "rule_service", "log_service", "vehicle_service"]
+
+[tool.black]
+line-length = 100
+target-version = ['py311']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "B",  # flake8-bugbear
+    "C4", # flake8-comprehensions
+    "UP", # pyupgrade
+]
+ignore = [
+    "E501",  # line too long (handled by black)
+    "B008",  # do not perform function calls in argument defaults
+    "C901",  # too complex
+]
+
+[tool.ruff.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-ra -q --strict-markers"
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+[tool.coverage.run]
+source = ["."]
+omit = [
+    "*/tests/*",
+    "*/test_*.py",
+    "*/__pycache__/*",
+    "*/venv/*",
+    "*/.venv/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]

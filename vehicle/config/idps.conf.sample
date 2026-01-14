@@ -1,0 +1,71 @@
+{
+  "system": {
+    "log_level": "INFO",
+    "log_file": "/var/log/idps/idps.log",
+    "log_max_size": 104857600,
+    "log_max_files": 10,
+    "pid_file": "/var/run/idps/idps.pid"
+  },
+  "vehicle": {
+    "vin": "WBAXXXXX17AK12345",
+    "device_fingerprint": ""
+  },
+  "cloud": {
+    "server_url": "https://idps-cloud.example.com",
+    "ca_cert": "/etc/idps/certs/ca.pem",
+    "client_cert": "/etc/idps/certs/client.pem",
+    "client_key": "/etc/idps/certs/client.key",
+    "verify_ssl": true,
+    "connection_timeout": 30,
+    "heartbeat_interval": 60,
+    "policy_sync_interval": 300
+  },
+  "connector": {
+    "listen_address": "127.0.0.1",
+    "listen_port": 9527,
+    "max_connections": 10,
+    "connection_timeout": 300
+  },
+  "network_probe": {
+    "enabled": true,
+    "suricata_bin": "/usr/bin/suricata",
+    "suricata_config": "/etc/suricata/suricata.yaml",
+    "rule_dir": "/var/lib/idps/rules/network",
+    "eve_log": "/var/log/suricata/eve.json",
+    "interfaces": ["eth0"]
+  },
+  "firewall_probe": {
+    "enabled": true,
+    "interfaces": ["eth0"],
+    "bpf_program": "/usr/lib/idps/bpf/xdp_firewall.bpf.o",
+    "rule_dir": "/var/lib/idps/rules/firewall",
+    "port_scan_threshold": 10,
+    "port_scan_window": 60
+  },
+  "host_probe": {
+    "enabled": true,
+    "audit_enabled": true,
+    "file_monitor_enabled": true,
+    "process_monitor_enabled": true,
+    "root_detector_enabled": true,
+    "perf_monitor_enabled": true,
+    "monitor_paths": [
+      "/etc",
+      "/usr/bin",
+      "/usr/sbin",
+      "/bin",
+      "/sbin"
+    ],
+    "perf_monitor_interval": 60
+  },
+  "log_upload": {
+    "batch_size": 100,
+    "batch_interval": 10,
+    "max_queue_size": 10000,
+    "compression": true,
+    "retry_times": 3,
+    "retry_interval": 5,
+    "offline_cache_dir": "/var/lib/idps/cache",
+    "offline_cache_max_size": 1073741824
+  }
+}

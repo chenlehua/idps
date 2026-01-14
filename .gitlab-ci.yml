@@ -1,0 +1,330 @@
+# IDPS GitLab CI/CD Pipeline Configuration
+
+stages:
+  - test
+  - build
+  - deploy
+
+variables:
+  # Docker镜像仓库配置
+  DOCKER_REGISTRY: "registry.gitlab.com"
+  DOCKER_IMAGE_PREFIX: "${CI_REGISTRY_IMAGE}"
+
+  # 版本标签
+  VERSION_TAG: "${CI_COMMIT_SHORT_SHA}"
+  LATEST_TAG: "latest"
+
+# ========================================
+# 车端项目 Pipeline
+# ========================================
+
+# 车端代码检查
+vehicle:lint:
+  stage: test
+  image: gcc:11
+  only:
+    changes:
+      - vehicle/**/*
+  script:
+    - cd vehicle
+    - apt-get update && apt-get install -y clang-format
+    - find src include -name "*.c" -o -name "*.h" | xargs clang-format --dry-run -Werror
+  tags:
+    - docker
+
+# 车端单元测试
+vehicle:test:
+  stage: test
+  image: gcc:11
+  only:
+    changes:
+      - vehicle/**/*
+  before_script:
+    - apt-get update
+    - apt-get install -y cmake libssl-dev libjansson-dev pkg-config
+  script:
+    - cd vehicle
+    - mkdir build && cd build
+    - cmake .. -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTS=ON
+    - make
+    - ctest --output-on-failure
+  artifacts:
+    reports:
+      junit: vehicle/build/test-results/*.xml
+  tags:
+    - docker
+
+# 车端交叉编译构建 (ARM64)
+vehicle:build:
+  stage: build
+  image: ubuntu:22.04
+  only:
+    changes:
+      - vehicle/**/*
+  before_script:
+    - apt-get update
+    - apt-get install -y cmake gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+    - apt-get install -y libssl-dev:arm64 libjansson-dev:arm64
+  script:
+    - cd vehicle
+    - ./build.sh cross
+    - ls -lh build-aarch64/src/daemon/idps_daemon
+  artifacts:
+    paths:
+      - vehicle/build-aarch64/src/daemon/idps_daemon
+    expire_in: 1 week
+  tags:
+    - docker
+
+# ========================================
+# 云端后端项目 Pipeline
+# ========================================
+
+# Python代码检查
+cloud:lint:
+  stage: test
+  image: python:3.11
+  only:
+    changes:
+      - cloud/**/*
+  before_script:
+    - pip install black flake8 mypy
+  script:
+    - cd cloud
+    - black --check .
+    - flake8 .
+    - mypy . --ignore-missing-imports
+  tags:
+    - docker
+
+# Python单元测试
+cloud:test:
+  stage: test
+  image: python:3.11
+  only:
+    changes:
+      - cloud/**/*
+  before_script:
+    - pip install -r cloud/requirements.txt
+    - pip install pytest pytest-cov
+  script:
+    - cd cloud
+    - pytest --cov=. --cov-report=xml --cov-report=html
+  coverage: '/TOTAL.*\s+(\d+%)$/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: cloud/coverage.xml
+  tags:
+    - docker
+
+# 构建认证服务镜像
+cloud:build:auth:
+  stage: build
+  image: docker:24
+  services:
+    - docker:24-dind
+  only:
+    changes:
+      - cloud/**/*
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - cd cloud/auth_service
+    - docker build -t ${DOCKER_IMAGE_PREFIX}/auth-service:${VERSION_TAG} .
+    - docker build -t ${DOCKER_IMAGE_PREFIX}/auth-service:${LATEST_TAG} .
+    - docker push ${DOCKER_IMAGE_PREFIX}/auth-service:${VERSION_TAG}
+    - docker push ${DOCKER_IMAGE_PREFIX}/auth-service:${LATEST_TAG}
+  tags:
+    - docker
+
+# 构建规则服务镜像
+cloud:build:rule:
+  stage: build
+  image: docker:24
+  services:
+    - docker:24-dind
+  only:
+    changes:
+      - cloud/**/*
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - cd cloud/rule_service
+    - docker build -t ${DOCKER_IMAGE_PREFIX}/rule-service:${VERSION_TAG} .
+    - docker build -t ${DOCKER_IMAGE_PREFIX}/rule-service:${LATEST_TAG} .
+    - docker push ${DOCKER_IMAGE_PREFIX}/rule-service:${VERSION_TAG}
+    - docker push ${DOCKER_IMAGE_PREFIX}/rule-service:${LATEST_TAG}
+  tags:
+    - docker
+
+# 构建日志服务镜像
+cloud:build:log:
+  stage: build
+  image: docker:24
+  services:
+    - docker:24-dind
+  only:
+    changes:
+      - cloud/**/*
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - cd cloud/log_service
+    - docker build -t ${DOCKER_IMAGE_PREFIX}/log-service:${VERSION_TAG} .
+    - docker build -t ${DOCKER_IMAGE_PREFIX}/log-service:${LATEST_TAG} .
+    - docker push ${DOCKER_IMAGE_PREFIX}/log-service:${VERSION_TAG}
+    - docker push ${DOCKER_IMAGE_PREFIX}/log-service:${LATEST_TAG}
+  tags:
+    - docker
+
+# 构建车辆管理服务镜像
+cloud:build:vehicle:
+  stage: build
+  image: docker:24
+  services:
+    - docker:24-dind
+  only:
+    changes:
+      - cloud/**/*
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - cd cloud/vehicle_service
+    - docker build -t ${DOCKER_IMAGE_PREFIX}/vehicle-service:${VERSION_TAG} .
+    - docker build -t ${DOCKER_IMAGE_PREFIX}/vehicle-service:${LATEST_TAG} .
+    - docker push ${DOCKER_IMAGE_PREFIX}/vehicle-service:${VERSION_TAG}
+    - docker push ${DOCKER_IMAGE_PREFIX}/vehicle-service:${LATEST_TAG}
+  tags:
+    - docker
+
+# ========================================
+# 前端项目 Pipeline
+# ========================================
+
+# 前端代码检查
+frontend:lint:
+  stage: test
+  image: node:20
+  only:
+    changes:
+      - frontend/**/*
+  before_script:
+    - cd frontend
+    - npm ci
+  script:
+    - npm run lint
+    - npm run type-check
+  tags:
+    - docker
+
+# 前端单元测试
+frontend:test:
+  stage: test
+  image: node:20
+  only:
+    changes:
+      - frontend/**/*
+  before_script:
+    - cd frontend
+    - npm ci
+  script:
+    - npm run test:ci
+  artifacts:
+    reports:
+      junit: frontend/junit.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: frontend/coverage/cobertura-coverage.xml
+  tags:
+    - docker
+
+# 前端构建
+frontend:build:
+  stage: build
+  image: node:20
+  only:
+    changes:
+      - frontend/**/*
+  before_script:
+    - cd frontend
+    - npm ci
+  script:
+    - npm run build
+  artifacts:
+    paths:
+      - frontend/dist
+    expire_in: 1 week
+  tags:
+    - docker
+
+# 前端Docker镜像构建
+frontend:build:docker:
+  stage: build
+  image: docker:24
+  services:
+    - docker:24-dind
+  only:
+    changes:
+      - frontend/**/*
+  needs:
+    - frontend:build
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - cd frontend
+    - docker build -t ${DOCKER_IMAGE_PREFIX}/frontend:${VERSION_TAG} .
+    - docker build -t ${DOCKER_IMAGE_PREFIX}/frontend:${LATEST_TAG} .
+    - docker push ${DOCKER_IMAGE_PREFIX}/frontend:${VERSION_TAG}
+    - docker push ${DOCKER_IMAGE_PREFIX}/frontend:${LATEST_TAG}
+  tags:
+    - docker
+
+# ========================================
+# 部署阶段
+# ========================================
+
+# 部署到测试环境
+deploy:staging:
+  stage: deploy
+  image: alpine:latest
+  only:
+    - develop
+  before_script:
+    - apk add --no-cache openssh-client
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - ssh-keyscan $STAGING_HOST >> ~/.ssh/known_hosts
+  script:
+    - ssh $STAGING_USER@$STAGING_HOST "cd /opt/idps && docker compose pull && docker compose up -d"
+  environment:
+    name: staging
+    url: https://staging.idps.example.com
+  tags:
+    - docker
+  when: manual
+
+# 部署到生产环境
+deploy:production:
+  stage: deploy
+  image: alpine:latest
+  only:
+    - main
+  before_script:
+    - apk add --no-cache openssh-client
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - ssh-keyscan $PRODUCTION_HOST >> ~/.ssh/known_hosts
+  script:
+    - ssh $PRODUCTION_USER@$PRODUCTION_HOST "cd /opt/idps && docker compose pull && docker compose up -d"
+  environment:
+    name: production
+    url: https://idps.example.com
+  tags:
+    - docker
+  when: manual

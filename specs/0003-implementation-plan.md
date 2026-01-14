@@ -857,7 +857,7 @@ gantt
   - 配置数据库连接信息
   - 配置JWT密钥等敏感信息
 - [ ] 部署Docker Compose
-  - 上传docker-compose.yml和相关配置
+  - 上传docker compose.yml和相关配置
   - 配置数据卷挂载
   - 启动所有服务
   - 验证服务健康状态

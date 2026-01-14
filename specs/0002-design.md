@@ -2806,7 +2806,7 @@ exit 0
 
 ```
 /opt/idps-cloud/
-├── docker-compose.yml          # Docker Compose配置
+├── docker compose.yml          # Docker Compose配置
 ├── .env                        # 环境变量配置
 ├── nginx/
 │   ├── nginx.conf              # Nginx配置
@@ -2844,7 +2844,7 @@ exit 0
 
 #### 5.2.2 Docker Compose配置
 
-**docker-compose.yml**：
+**docker compose.yml**：
 
 ```yaml
 version: '3.8'
