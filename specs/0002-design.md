@@ -5,10 +5,12 @@
 | 项目 | 内容 |
 |------|------|
 | 文档编号 | IDPS-DESIGN-0002 |
-| 文档版本 | v1.0 |
+| 文档版本 | v1.1 |
 | 创建日期 | 2026-01-14 |
+| 更新日期 | 2026-01-14 |
 | 文档状态 | 草案 |
 | 项目名称 | 车辆入侵检测系统详细设计 |
+| 变更说明 | v1.1: 云端部署从Kubernetes改为Docker Compose，后端语言从Go改为Python |
 
 ## 1. 系统架构设计
 
@@ -137,43 +139,46 @@ graph TB
     LogParser -->|读取EVE JSON| Suricata
 ```
 
-### 1.4 云端微服务架构
+### 1.4 云端Docker Compose架构
 
 ```mermaid
 graph TB
     Client[前端应用]
 
-    subgraph K8S["Kubernetes集群"]
-        Ingress[Ingress网关]
+    subgraph DockerHost["Docker主机"]
+        Nginx[Nginx网关]
 
         subgraph Services["微服务层"]
-            AuthSvc[认证服务<br/>3副本]
-            RuleSvc[规则服务<br/>3副本]
-            LogSvc[日志服务<br/>5副本]
-            VehicleSvc[车辆服务<br/>3副本]
-            NotifySvc[通知服务<br/>2副本]
+            AuthSvc[认证服务<br/>Python/Flask]
+            RuleSvc[规则服务<br/>Python/Flask]
+            LogSvc[日志服务<br/>Python/Flask]
+            VehicleSvc[车辆服务<br/>Python/Flask]
         end
 
         subgraph Data["数据层"]
-            MySQLPod[(MySQL<br/>主从)]
-            ClickHousePod[(ClickHouse<br/>集群)]
-            RedisPod[(Redis<br/>集群)]
+            MySQL[(MySQL)]
+            ClickHouse[(ClickHouse)]
+            Redis[(Redis)]
+        end
+
+        subgraph Frontend["前端层"]
+            FrontendApp[React应用<br/>Nginx托管]
         end
     end
 
-    Client -->|HTTPS| Ingress
-    Ingress --> AuthSvc
-    Ingress --> RuleSvc
-    Ingress --> LogSvc
-    Ingress --> VehicleSvc
+    Client -->|HTTPS| Nginx
+    Nginx --> FrontendApp
+    Nginx --> AuthSvc
+    Nginx --> RuleSvc
+    Nginx --> LogSvc
+    Nginx --> VehicleSvc
 
-    AuthSvc --> MySQLPod
-    AuthSvc --> RedisPod
-    RuleSvc --> MySQLPod
-    RuleSvc --> RedisPod
-    VehicleSvc --> MySQLPod
-    LogSvc --> ClickHousePod
-    LogSvc --> NotifySvc
+    AuthSvc --> MySQL
+    AuthSvc --> Redis
+    RuleSvc --> MySQL
+    RuleSvc --> Redis
+    VehicleSvc --> MySQL
+    LogSvc --> ClickHouse
 ```
 
 ## 2. 车端详细设计
@@ -2793,185 +2798,440 @@ exit 0
 
 ### 5.2 云端部署
 
-#### 5.2.1 Kubernetes部署架构
+#### 5.2.1 Docker Compose部署架构
 
-```mermaid
-graph TB
-    subgraph K8S["Kubernetes集群"]
-        Ingress[Ingress Controller<br/>Nginx]
+云端采用Docker Compose部署，所有服务运行在同一台主机或Docker Swarm集群中。
 
-        subgraph Frontend["前端服务"]
-            FE1[frontend-pod-1]
-            FE2[frontend-pod-2]
-        end
+**目录结构**：
 
-        subgraph Backend["后端服务"]
-            Auth1[auth-svc-pod-1]
-            Auth2[auth-svc-pod-2]
-            Auth3[auth-svc-pod-3]
-
-            Rule1[rule-svc-pod-1]
-            Rule2[rule-svc-pod-2]
-
-            Log1[log-svc-pod-1]
-            Log2[log-svc-pod-2]
-            Log3[log-svc-pod-3]
-
-            Vehicle1[vehicle-svc-pod-1]
-            Vehicle2[vehicle-svc-pod-2]
-        end
-
-        subgraph Database["数据层"]
-            MySQL[MySQL StatefulSet<br/>主从]
-            ClickHouse[ClickHouse StatefulSet<br/>集群]
-            Redis[Redis StatefulSet<br/>哨兵]
-        end
-    end
-
-    Internet((Internet)) --> Ingress
-
-    Ingress --> FE1
-    Ingress --> FE2
-    Ingress --> Auth1
-    Ingress --> Rule1
-    Ingress --> Log1
-    Ingress --> Vehicle1
-
-    Auth1 --> MySQL
-    Auth1 --> Redis
-    Rule1 --> MySQL
-    Rule1 --> Redis
-    Vehicle1 --> MySQL
-    Log1 --> ClickHouse
+```
+/opt/idps-cloud/
+├── docker-compose.yml          # Docker Compose配置
+├── .env                        # 环境变量配置
+├── nginx/
+│   ├── nginx.conf              # Nginx配置
+│   └── ssl/                    # SSL证书
+│       ├── server.crt
+│       └── server.key
+├── services/
+│   ├── auth-service/           # 认证服务
+│   │   ├── Dockerfile
+│   │   ├── requirements.txt
+│   │   └── app/
+│   ├── rule-service/           # 规则服务
+│   │   ├── Dockerfile
+│   │   ├── requirements.txt
+│   │   └── app/
+│   ├── log-service/            # 日志服务
+│   │   ├── Dockerfile
+│   │   ├── requirements.txt
+│   │   └── app/
+│   └── vehicle-service/        # 车辆服务
+│       ├── Dockerfile
+│       ├── requirements.txt
+│       └── app/
+├── frontend/
+│   ├── Dockerfile
+│   └── build/                  # React构建产物
+├── data/
+│   ├── mysql/                  # MySQL数据目录
+│   ├── clickhouse/             # ClickHouse数据目录
+│   └── redis/                  # Redis数据目录
+└── logs/
+    ├── nginx/
+    └── services/
 ```
 
-#### 5.2.2 Kubernetes配置示例
+#### 5.2.2 Docker Compose配置
 
-**Deployment配置**（log-service）：
+**docker-compose.yml**：
 
 ```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: log-service
-  namespace: idps
-  labels:
-    app: log-service
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: log-service
-  template:
-    metadata:
-      labels:
-        app: log-service
-    spec:
-      containers:
-      - name: log-service
-        image: idps/log-service:v1.2.3
-        ports:
-        - containerPort: 8080
-          name: http
-        env:
-        - name: CLICKHOUSE_HOST
-          value: "clickhouse-service"
-        - name: CLICKHOUSE_PORT
-          value: "9000"
-        - name: REDIS_HOST
-          value: "redis-service"
-        - name: REDIS_PORT
-          value: "6379"
-        resources:
-          requests:
-            cpu: "500m"
-            memory: "1Gi"
-          limits:
-            cpu: "2000m"
-            memory: "4Gi"
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          initialDelaySeconds: 30
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /ready
-            port: 8080
-          initialDelaySeconds: 10
-          periodSeconds: 5
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: log-service
-  namespace: idps
-spec:
-  selector:
-    app: log-service
-  ports:
-  - protocol: TCP
-    port: 80
-    targetPort: 8080
-  type: ClusterIP
+version: '3.8'
+
+networks:
+  idps-network:
+    driver: bridge
+
+volumes:
+  mysql-data:
+  clickhouse-data:
+  redis-data:
+
+services:
+  # 数据库服务
+  mysql:
+    image: mysql:8.0
+    container_name: idps-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: idps
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./init-scripts/mysql:/docker-entrypoint-initdb.d
+    ports:
+      - "3306:3306"
+    networks:
+      - idps-network
+    restart: always
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:23.8
+    container_name: idps-clickhouse
+    environment:
+      CLICKHOUSE_DB: idps_logs
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - ./init-scripts/clickhouse:/docker-entrypoint-initdb.d
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    networks:
+      - idps-network
+    restart: always
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7.0-alpine
+    container_name: idps-redis
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - idps-network
+    restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 后端服务
+  auth-service:
+    build:
+      context: ./services/auth-service
+      dockerfile: Dockerfile
+    container_name: idps-auth-service
+    environment:
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_DATABASE=idps
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "5001:5000"
+    networks:
+      - idps-network
+    restart: always
+    volumes:
+      - ./logs/services:/app/logs
+
+  rule-service:
+    build:
+      context: ./services/rule-service
+      dockerfile: Dockerfile
+    container_name: idps-rule-service
+    environment:
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_DATABASE=idps
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "5002:5000"
+    networks:
+      - idps-network
+    restart: always
+    volumes:
+      - ./logs/services:/app/logs
+      - ./data/rules:/app/rules
+
+  log-service:
+    build:
+      context: ./services/log-service
+      dockerfile: Dockerfile
+    container_name: idps-log-service
+    environment:
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PORT=9000
+      - CLICKHOUSE_USER=${CLICKHOUSE_USER}
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
+      - CLICKHOUSE_DATABASE=idps_logs
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "5003:5000"
+    networks:
+      - idps-network
+    restart: always
+    volumes:
+      - ./logs/services:/app/logs
+
+  vehicle-service:
+    build:
+      context: ./services/vehicle-service
+      dockerfile: Dockerfile
+    container_name: idps-vehicle-service
+    environment:
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_DATABASE=idps
+    depends_on:
+      mysql:
+        condition: service_healthy
+    ports:
+      - "5004:5000"
+    networks:
+      - idps-network
+    restart: always
+    volumes:
+      - ./logs/services:/app/logs
+
+  # 前端服务
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: idps-frontend
+    ports:
+      - "3000:80"
+    networks:
+      - idps-network
+    restart: always
+
+  # Nginx网关
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: idps-nginx
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./logs/nginx:/var/log/nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - auth-service
+      - rule-service
+      - log-service
+      - vehicle-service
+      - frontend
+    networks:
+      - idps-network
+    restart: always
 ```
 
-**Ingress配置**：
+#### 5.2.3 Python服务Dockerfile示例
 
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: idps-ingress
-  namespace: idps
-  annotations:
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
-spec:
-  tls:
-  - hosts:
-    - vsoc.example.com
-    secretName: idps-tls-secret
-  rules:
-  - host: vsoc.example.com
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: frontend-service
-            port:
-              number: 80
-      - path: /api/v1/auth
-        pathType: Prefix
-        backend:
-          service:
-            name: auth-service
-            port:
-              number: 80
-      - path: /api/v1/rule
-        pathType: Prefix
-        backend:
-          service:
-            name: rule-service
-            port:
-              number: 80
-      - path: /api/v1/log
-        pathType: Prefix
-        backend:
-          service:
-            name: log-service
-            port:
-              number: 80
-      - path: /api/v1/vehicle
-        pathType: Prefix
-        backend:
-          service:
-            name: vehicle-service
-            port:
-              number: 80
+**services/auth-service/Dockerfile**：
+
+```dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# 安装系统依赖
+RUN apt-get update && apt-get install -y \
+    gcc \
+    default-libmysqlclient-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# 复制依赖文件
+COPY requirements.txt .
+
+# 安装Python依赖
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 复制应用代码
+COPY app/ ./app/
+
+# 暴露端口
+EXPOSE 5000
+
+# 启动应用
+CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "app.main:app"]
+```
+
+**services/auth-service/requirements.txt**：
+
+```txt
+Flask==3.0.0
+Flask-SQLAlchemy==3.1.1
+Flask-CORS==4.0.0
+PyMySQL==1.1.0
+cryptography==41.0.7
+redis==5.0.1
+PyJWT==2.8.0
+gunicorn==21.2.0
+python-dotenv==1.0.0
+```
+
+#### 5.2.4 Nginx配置示例
+
+**nginx/nginx.conf**：
+
+```nginx
+user nginx;
+worker_processes auto;
+error_log /var/log/nginx/error.log warn;
+pid /var/run/nginx.pid;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+
+    log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                    '$status $body_bytes_sent "$http_referer" '
+                    '"$http_user_agent" "$http_x_forwarded_for"';
+
+    access_log /var/log/nginx/access.log main;
+
+    sendfile on;
+    tcp_nopush on;
+    tcp_nodelay on;
+    keepalive_timeout 65;
+    types_hash_max_size 2048;
+
+    # Gzip压缩
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types text/plain text/css text/xml text/javascript
+               application/json application/javascript application/xml+rss;
+
+    # 上游服务器定义
+    upstream auth_service {
+        server auth-service:5000;
+    }
+
+    upstream rule_service {
+        server rule-service:5000;
+    }
+
+    upstream log_service {
+        server log-service:5000;
+    }
+
+    upstream vehicle_service {
+        server vehicle-service:5000;
+    }
+
+    upstream frontend {
+        server frontend:80;
+    }
+
+    # HTTP重定向到HTTPS
+    server {
+        listen 80;
+        server_name vsoc.example.com;
+        return 301 https://$server_name$request_uri;
+    }
+
+    # HTTPS服务器
+    server {
+        listen 443 ssl http2;
+        server_name vsoc.example.com;
+
+        # SSL证书配置
+        ssl_certificate /etc/nginx/ssl/server.crt;
+        ssl_certificate_key /etc/nginx/ssl/server.key;
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_ciphers HIGH:!aNULL:!MD5;
+        ssl_prefer_server_ciphers on;
+
+        # 客户端证书验证（车端双向认证）
+        ssl_client_certificate /etc/nginx/ssl/ca.crt;
+        ssl_verify_client optional;
+
+        # 前端静态资源
+        location / {
+            proxy_pass http://frontend;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # API路由
+        location /api/v1/auth {
+            proxy_pass http://auth_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-SSL-Client-Verify $ssl_client_verify;
+            proxy_set_header X-SSL-Client-DN $ssl_client_s_dn;
+        }
+
+        location /api/v1/rule {
+            proxy_pass http://rule_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        location /api/v1/log {
+            proxy_pass http://log_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+            # 日志上报接口增加超时
+            proxy_read_timeout 300s;
+            proxy_send_timeout 300s;
+        }
+
+        location /api/v1/vehicle {
+            proxy_pass http://vehicle_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+    }
+}
 ```
 
 ## 6. 安全设计

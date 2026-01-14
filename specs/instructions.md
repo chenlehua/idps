@@ -72,8 +72,6 @@ FTP弱密码监控
 9.8 TCP连接数监控 同一目的IP地址的连接数超过阈值时，产生事件，生成日志并上报。周期性获取系统内TCP连接情况并上报。
 9.9 APN监控 APN指应用上网所使用的网络接入点，具体指WiFi、4G、USB通道。根据数据包的网卡名称，判断属于哪种APN，并记录日志，周期性上报。
 
-
-
 10、主机入侵检测
 10.1 Audit监控 系统调用和cmd指令监控，规则示例： {"rule":[{"process":"mediaserver","syscallid":["270","271","117","279","40"]}]} {"cmd":["su","rm","killall"]}
 10.2 文件监控 采用inotify实现：
@@ -101,10 +99,11 @@ instruct和superapks字段：检查系统中是否存在root程序，如果存�
 按照这个想法，帮我生成详细的需求，放在./specs/0001-spec.md 文件中, 输出为中文。
 
 
-
-## specify con
-
-
 ## 详细设计
 
 按照./specs/0001-spec.md 文件中的需求，帮我生成详细的设计文档，放在./specs/0002-design.md文件中，图表使用mermaid,输出为中文。 
+
+## plan
+
+按照./specs/0002-design.md文件中的设计，帮我生成实现计划，放在./specs/0003-implementation-plan.md 文件中, 输出为中文。
+
