@@ -1,5 +1,7 @@
 # Instructions
 
+## 需求生成
+
 基于Suricata开发车辆入侵检测系统，支持运行于车载ARMv8架构平台
 
 1、开发环境搭建
@@ -97,3 +99,12 @@ instruct和superapks字段：检查系统中是否存在root程序，如果存�
 
 
 按照这个想法，帮我生成详细的需求，放在./specs/0001-spec.md 文件中, 输出为中文。
+
+
+
+## specify con
+
+
+## 详细设计
+
+按照./specs/0001-spec.md 文件中的需求，帮我生成详细的设计文档，放在./specs/0002-design.md文件中，图表使用mermaid,输出为中文。 
